@@ -1,12 +1,12 @@
 /**
  * eventRiver 布局算法
  * @module echarts/layout/eventRiver
- * @author clmtulip  (车丽美, chelimei@baidu.com)
+ * @author clmtulip  (车丽美, clmtulip@gmail.com)
  */
 define(function(require) {
-    function eventRiverLayout(series, area) {
-        var space = 15;
-        var scale = 10;
+    function eventRiverLayout(series, intervalX, area) {
+        var space = 5;
+        var scale = intervalX;
 
         function importanceSort(a, b) {
             var x = a.importance;
@@ -31,17 +31,17 @@ define(function(require) {
         
         // step 0. calculate event importance and sort descending
         for (var i = 0; i < series.length; i++) {
-            for (var j = 0; j < series[i].eventList.length; j++) {
-                if (series[i].eventList[j].weight == null) {
-                    series[i].eventList[j].weight = 1;
+            for (var j = 0; j < series[i].data.length; j++) {
+                if (series[i].data[j].weight == null) {
+                    series[i].data[j].weight = 1;
                 }
                 var importance = 0;
-                for (var k = 0; k < series[i].eventList[j].evolution.length; k++) {
-                    importance += series[i].eventList[j].evolution[k].valueScale;
+                for (var k = 0; k < series[i].data[j].evolution.length; k++) {
+                    importance += series[i].data[j].evolution[k].valueScale;
                 }
-                series[i].eventList[j].importance = importance * series[i].eventList[j].weight;
+                series[i].data[j].importance = importance * series[i].data[j].weight;
             }
-            series[i].eventList.sort(importanceSort);
+            series[i].data.sort(importanceSort);
         }
         
         // step 1. 计算每个group的重要值importance，并按递减顺序排序
@@ -50,8 +50,8 @@ define(function(require) {
                 series[i].weight = 1;
             }
             var importance = 0;
-            for (var j = 0; j < series[i].eventList.length; j++) {
-                importance += series[i].eventList[j].weight;
+            for (var j = 0; j < series[i].data.length; j++) {
+                importance += series[i].data[j].weight;
             }
             series[i].importance = importance * series[i].weight;
         }
@@ -63,9 +63,9 @@ define(function(require) {
         var minTime = Number.MAX_VALUE;
         var maxTime = 0;
         for (var i = 0; i < series.length; i++) {
-            for (var j = 0; j < series[i].eventList.length; j++) {
-                for (var k = 0; k < series[i].eventList[j].evolution.length; k++) {
-                    var time = series[i].eventList[j].evolution[k].timeScale;
+            for (var j = 0; j < series[i].data.length; j++) {
+                for (var k = 0; k < series[i].data[j].evolution.length; k++) {
+                    var time = series[i].data[j].evolution[k].timeScale;
                     minTime = Math.min(minTime, time);
                     maxTime = Math.max(maxTime, time);
                 }
@@ -75,17 +75,17 @@ define(function(require) {
         // console.log('maxTime: ' + maxTime);
         
         // 建立线段树根节点
-        var root = segmentTreeBuild(minTime, maxTime);
+        var root = segmentTreeBuild(Math.floor(minTime), Math.ceil(maxTime));
 
         var totalMaxY = 0;
         for (var i = 0; i < series.length; i++) {
-            for (var j = 0; j < series[i].eventList.length; j++) {
-                var e = series[i].eventList[j];
+            for (var j = 0; j < series[i].data.length; j++) {
+                var e = series[i].data[j];
                 e.time = [];
                 e.value = [];
-                for (var k = 0; k < series[i].eventList[j].evolution.length; k++) {
-                    e.time.push(series[i].eventList[j].evolution[k].timeScale);
-                    e.value.push(series[i].eventList[j].evolution[k].valueScale);
+                for (var k = 0; k < series[i].data[j].evolution.length; k++) {
+                    e.time.push(series[i].data[j].evolution[k].timeScale);
+                    e.value.push(series[i].data[j].evolution[k].valueScale);
                 }
 
                 var mxIndex = indexOf(e.value, Math.max.apply(Math, e.value));
@@ -95,12 +95,12 @@ define(function(require) {
                 // 检测overlap，调整event.y
                 for (k = 0; k < e.time.length - 1; k++) {
                     var curMaxY = segmentTreeQuery(root, e.time[k], e.time[k + 1]);
-                    if (e.y - e.value[k] / 2 < curMaxY) {
+                    if (e.y - e.value[k] / 2 - space < curMaxY) {
                         e.y = curMaxY + e.value[k] / 2  + space;
                     }
                 }
                 var curMaxY = segmentTreeQuery(root, e.time[k], e.time[k] + scale);
-                if (e.y - e.value[k] / 2 < curMaxY) {
+                if (e.y - e.value[k] / 2 - space < curMaxY) {
                     e.y = curMaxY + e.value[k] / 2 + space;
                 }
                 series[i].y = e.y;
@@ -129,12 +129,12 @@ define(function(require) {
         var yScale = (area.height - space) / maxY;
         for (var i = 0; i < series.length; i++) {
             series[i].y = series[i].y * yScale + yBase;
-            var eventList = series[i].eventList;
+            var eventList = series[i].data;
             for (var j = 0; j < eventList.length; j++) {
                 eventList[j].y = eventList[j].y * yScale + yBase;
                 var evolutionList = eventList[j].evolution;
                 for (var k = 0; k < evolutionList.length; k++) {
-                    evolutionList[k].valueScale *= yScale * 0.9;
+                    evolutionList[k].valueScale *= yScale * 1;
                 }
             }
             
@@ -149,18 +149,24 @@ define(function(require) {
             'rightChild': null,
             'maxValue': 0
         };
-        // console.log(left + ' ' + right);
-        if (Math.ceil(left) + 1 < Math.floor(right)) {
-            var mid = (left + right) >> 1;
+        
+        if (left + 1 < right) {
+            var mid = Math.round( (left + right) / 2);
             root.leftChild = segmentTreeBuild(left, mid);
             root.rightChild = segmentTreeBuild(mid, right);
         }
+        
         return root;
     }
 
     function segmentTreeQuery(root, left, right) {
-        var mid = (root.left + root.right) >> 1;
+        if (right - left < 1) {
+            return 0;
+        }
+
+        var mid = Math.round( (root.left + root.right) / 2);
         var result = 0;
+        
         if (left == root.left && right == root.right) {
             result = root.maxValue;
         }
@@ -189,11 +195,13 @@ define(function(require) {
         if (root == null) {
             return ;
         }
-        var mid = (root.left + root.right) >> 1;
+        var mid = Math.round( (root.left + root.right) / 2);
         root.maxValue = root.maxValue > value ? root.maxValue : value;
 
-        if (left == root.left && right == root.right) {
-            return ;
+        if (Math.floor(left * 10) == Math.floor(root.left * 10) 
+            && Math.floor(right * 10) == Math.floor(root.right * 10)
+        ) {
+            return;
         }
         else if (right <= mid) {
             segmentTreeInsert(root.leftChild, left, right, value);

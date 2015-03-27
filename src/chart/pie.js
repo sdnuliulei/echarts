@@ -2,11 +2,10 @@
  * echarts图表类：饼图
  *
  * @desc echarts基于Canvas，纯Javascript图表库，提供直观，生动，可交互，可个性化定制的数据统计图表。
- * @author Kener (@Kener-林峰, linzhifeng@baidu.com)
+ * @author Kener (@Kener-林峰, kener.linfeng@gmail.com)
  *
  */
 define(function (require) {
-    var ComponentBase = require('../component/base');
     var ChartBase = require('./base');
     
     // 图形依赖
@@ -14,9 +13,69 @@ define(function (require) {
     var RingShape = require('zrender/shape/Ring');
     var CircleShape = require('zrender/shape/Circle');
     var SectorShape = require('zrender/shape/Sector');
-    var BrokenLineShape = require('zrender/shape/BrokenLine');
+    var PolylineShape = require('zrender/shape/Polyline');
 
     var ecConfig = require('../config');
+    // 饼图默认参数
+    ecConfig.pie = {
+        zlevel: 0,                  // 一级层叠
+        z: 2,                       // 二级层叠
+        clickable: true,
+        legendHoverLink: true,
+        center: ['50%', '50%'],     // 默认全局居中
+        radius: [0, '75%'],
+        clockWise: true,            // 默认顺时针
+        startAngle: 90,
+        minAngle: 0,                // 最小角度改为0
+        selectedOffset: 10,         // 选中是扇区偏移量
+        // selectedMode: false,     // 选择模式，默认关闭，可选single，multiple
+        // roseType: null,          // 南丁格尔玫瑰图模式，'radius'（半径） | 'area'（面积）
+        itemStyle: {
+            normal: {
+                // color: 各异,
+                borderColor: 'rgba(0,0,0,0)',
+                borderWidth: 1,
+                label: {
+                    show: true,
+                    position: 'outer'
+                    // formatter: 标签文本格式器，同Tooltip.formatter，不支持异步回调
+                    // textStyle: null      // 默认使用全局文本样式，详见TEXTSTYLE
+                    // distance: 当position为inner时有效，为label位置到圆心的距离与圆半径(环状图为内外半径和)的比例系数
+                },
+                labelLine: {
+                    show: true,
+                    length: 20,
+                    lineStyle: {
+                        // color: 各异,
+                        width: 1,
+                        type: 'solid'
+                    }
+                }
+            },
+            emphasis: {
+                // color: 各异,
+                borderColor: 'rgba(0,0,0,0)',
+                borderWidth: 1,
+                label: {
+                    show: false
+                    // position: 'outer'
+                    // formatter: 标签文本格式器，同Tooltip.formatter，不支持异步回调
+                    // textStyle: null      // 默认使用全局文本样式，详见TEXTSTYLE
+                    // distance: 当position为inner时有效，为label位置到圆心的距离与圆半径(环状图为内外半径和)的比例系数
+                },
+                labelLine: {
+                    show: false,
+                    length: 20,
+                    lineStyle: {
+                        // color: 各异,
+                        width: 1,
+                        type: 'solid'
+                    }
+                }
+            }
+        }
+    };
+
     var ecData = require('../util/ecData');
     var zrUtil = require('zrender/tool/util');
     var zrMath = require('zrender/tool/math');
@@ -30,10 +89,8 @@ define(function (require) {
      * @param {Object} component 组件
      */
     function Pie(ecTheme, messageCenter, zr, option, myChart){
-        // 基类
-        ComponentBase.call(this, ecTheme, messageCenter, zr, option, myChart);
         // 图表基类
-        ChartBase.call(this);
+        ChartBase.call(this, ecTheme, messageCenter, zr, option, myChart);
 
         var self = this;
         /**
@@ -100,8 +157,7 @@ define(function (require) {
                     this.legendHoverLink = series[i].legendHoverLink || this.legendHoverLink;
                     serieName = series[i].name || '';
                     // 系列图例开关
-                    this.selectedMap[serieName] = 
-                        legend ? legend.isSelected(serieName) : true;
+                    this.selectedMap[serieName] = legend ? legend.isSelected(serieName) : true;
                     if (!this.selectedMap[serieName]) {
                         continue;
                     }
@@ -112,7 +168,8 @@ define(function (require) {
                     this._selected[i] = [];
                     if (this.deepQuery([series[i], this.option], 'calculable')) {
                         pieCase = {
-                            zlevel: this._zlevelBase,
+                            zlevel: this.getZlevelBase(),
+                            z: this.getZBase(),
                             hoverable: false,
                             style: {
                                 x: center[0],          // 圆心横坐标
@@ -124,14 +181,15 @@ define(function (require) {
                                 lineWidth: 1,
                                 strokeColor: series[i].calculableHolderColor
                                              || this.ecTheme.calculableHolderColor
+                                             || ecConfig.calculableHolderColor
                             }
                         };
                         ecData.pack(pieCase, series[i], i, undefined, -1);
                         this.setCalculable(pieCase);
                         
                         pieCase = radius[0] <= 10 
-                            ? new CircleShape(pieCase) 
-                            : new RingShape(pieCase);
+                                  ? new CircleShape(pieCase) 
+                                  : new RingShape(pieCase);
                         this.shapeList.push(pieCase);
                     }
                     this._buildSinglePie(i);
@@ -350,7 +408,8 @@ define(function (require) {
                 );
 
             var sector = {
-                zlevel: this._zlevelBase,
+                zlevel: this.getZlevelBase(),
+                z: this.getZBase(),
                 clickable: this.deepQuery(queryTarget, 'clickable'),
                 style: {
                     x: center[0],          // 圆心横坐标
@@ -456,9 +515,9 @@ define(function (require) {
                 y = centerY;
                 textAlign = 'center';
             }
-            else if (labelControl.position === 'inner'){
-                // 内部显示
-                radius = (radius[0] + radius[1]) / 2;
+            else if (labelControl.position === 'inner' || labelControl.position === 'inside') {
+                // 内部标签显示, 按外半径比例计算标签位置
+                radius = (radius[0] + radius[1]) * (labelControl.distance || 0.5);
                 x = Math.round(centerX + radius * zrMath.cos(midAngle, true));
                 y = Math.round(centerY - radius * zrMath.sin(midAngle, true));
                 defaultColor = '#fff';
@@ -472,14 +531,18 @@ define(function (require) {
                 textAlign = (midAngle >= 90 && midAngle <= 270) ? 'right' : 'left';
             }
             
-            if (labelControl.position != 'center' && labelControl.position != 'inner') {
+            if (labelControl.position != 'center' 
+                && labelControl.position != 'inner'
+                && labelControl.position != 'inside'
+            ) {
                 x += textAlign === 'left' ? 20 : -20;
             }
             data.__labelX = x - (textAlign === 'left' ? 5 : -5);
             data.__labelY = y;
             
             var ts = new TextShape({
-                zlevel: this._zlevelBase + 1,
+                zlevel: this.getZlevelBase(),
+                z: this.getZBase() + 1,
                 hoverable: false,
                 style: {
                     x: x,
@@ -519,10 +582,16 @@ define(function (require) {
                 if (typeof formatter === 'function') {
                     return formatter.call(
                         this.myChart,
-                        serie.name,
-                        data.name,
-                        data.value,
-                        percent
+                        {
+                            seriesIndex: seriesIndex,
+                            seriesName: serie.name || '',
+                            series: serie,
+                            dataIndex: dataIndex,
+                            data: data,
+                            name: data.name,
+                            value: data.value,
+                            percent: percent
+                        }
                     );
                 }
                 else if (typeof formatter === 'string') {
@@ -579,9 +648,9 @@ define(function (require) {
                 var cosValue = zrMath.cos(midAngle, true);
                 var sinValue = zrMath.sin(midAngle, true);
 
-                return new BrokenLineShape({
-                    // shape: 'brokenLine',
-                    zlevel: this._zlevelBase + 1,
+                return new PolylineShape({
+                    zlevel: this.getZlevelBase(),
+                    z: this.getZBase() + 1,
                     hoverable: false,
                     style: {
                         pointList: [
@@ -653,7 +722,7 @@ define(function (require) {
             var rightList = [];
             
             for (var i = 0, l = sList.length; i < l; i++) {
-                if (sList[i]._labelPosition === 'outer') {
+                if (sList[i]._labelPosition === 'outer' || sList[i]._labelPosition === 'outside') {
                     sList[i]._rect._y = sList[i]._rect.y;
                     if (sList[i]._rect.x < center[0]) {
                         leftList.push(sList[i]);
@@ -749,8 +818,10 @@ define(function (require) {
                     }
                     
                     sList[i]._rect.x = sList[i].style.x = x + deltaX * direction;
-                    sList[i]._labelLine.style.pointList[2][0] = x + (deltaX - 5) * direction;
-                    sList[i]._labelLine.style.pointList[1][0] = x + (deltaX - 20) *direction;
+                    if (sList[i]._labelLine) {
+                        sList[i]._labelLine.style.pointList[2][0] = x + (deltaX - 5) * direction;
+                        sList[i]._labelLine.style.pointList[1][0] = x + (deltaX - 20) *direction;
+                    }
                     lastDeltaX = deltaX;
                 }
             }
@@ -790,20 +861,21 @@ define(function (require) {
             // 常用方法快捷方式
             var _merge = zrUtil.merge;
             opt = _merge(
-                      opt || {},
-                      this.ecTheme.pie
+                      _merge(
+                          opt || {}, zrUtil.clone(this.ecTheme.pie || {})
+                      ),
+                      zrUtil.clone(ecConfig.pie)
                   );
 
             // 通用字体设置
-            opt.itemStyle.normal.label.textStyle = _merge(
-                opt.itemStyle.normal.label.textStyle || {},
-                this.ecTheme.textStyle
+            opt.itemStyle.normal.label.textStyle = this.getTextStyle(
+                opt.itemStyle.normal.label.textStyle
             );
-            opt.itemStyle.emphasis.label.textStyle = _merge(
-                opt.itemStyle.emphasis.label.textStyle || {},
-                this.ecTheme.textStyle
+            opt.itemStyle.emphasis.label.textStyle = this.getTextStyle(
+                opt.itemStyle.emphasis.label.textStyle
             );
-
+            this.z = opt.z;
+            this.zlevel = opt.zlevel;
             return opt;
         },
 
@@ -823,13 +895,21 @@ define(function (require) {
         /**
          * 动态数据增加动画 
          */
-        addDataAnimation: function (params) {
+        addDataAnimation: function (params, done) {
             var series = this.series;
             var aniMap = {}; // seriesIndex索引参数
             for (var i = 0, l = params.length; i < l; i++) {
                 aniMap[params[i][0]] = params[i];
             }
             
+            var aniCount = 0;
+            function animationDone() {
+                aniCount--;
+                if (aniCount === 0) {
+                    done && done();
+                }
+            }
+
             // 构建新的饼图匹配差异做动画
             var sectorMap = {};
             var textMap = {};
@@ -884,7 +964,7 @@ define(function (require) {
                     case 'text' :
                         textMap[key] = this.shapeList[i];
                         break;
-                    case 'broken-line' :
+                    case 'polyline' :
                         lineMap[key] = this.shapeList[i];
                         break;
                 }
@@ -903,6 +983,7 @@ define(function (require) {
                     }
                     if (backupShapeList[i].type === 'sector') {
                         if (targeSector != 'delete') {
+                            aniCount++;
                             // 原有扇形
                             this.zr.animate(backupShapeList[i].id, 'style')
                                 .when(
@@ -912,9 +993,11 @@ define(function (require) {
                                         endAngle: targeSector.style.endAngle
                                     }
                                 )
+                                .done(animationDone)
                                 .start();
                         }
                         else {
+                            aniCount++;
                             // 删除的扇形
                             this.zr.animate(backupShapeList[i].id, 'style')
                                 .when(
@@ -923,11 +1006,12 @@ define(function (require) {
                                     ? { startAngle: backupShapeList[i].style.startAngle }
                                     : { endAngle: backupShapeList[i].style.endAngle }
                                 )
+                                .done(animationDone)
                                 .start();
                         }
                     }
                     else if (backupShapeList[i].type === 'text'
-                             || backupShapeList[i].type === 'broken-line'
+                             || backupShapeList[i].type === 'polyline'
                     ) {
                         if (targeSector === 'delete') {
                             // 删除逻辑一样
@@ -937,6 +1021,7 @@ define(function (require) {
                             // 懒得新建变量了，借用一下
                             switch (backupShapeList[i].type) {
                                 case 'text':
+                                    aniCount++;
                                     targeSector = textMap[key];
                                     this.zr.animate(backupShapeList[i].id, 'style')
                                         .when(
@@ -946,9 +1031,11 @@ define(function (require) {
                                                 y :targeSector.style.y
                                             }
                                         )
+                                        .done(animationDone)
                                         .start();
                                     break;
-                                case 'broken-line':
+                                case 'polyline':
+                                    aniCount++;
                                     targeSector = lineMap[key];
                                     this.zr.animate(backupShapeList[i].id, 'style')
                                         .when(
@@ -957,6 +1044,7 @@ define(function (require) {
                                                 pointList:targeSector.style.pointList
                                             }
                                         )
+                                        .done(animationDone)
                                         .start();
                                     break;
                             }
@@ -966,6 +1054,11 @@ define(function (require) {
                 }
             }
             this.shapeList = backupShapeList;
+
+            // 没有动画
+            if (!aniCount) {
+                animationDone();
+            }
         },
 
         onclick: function (param) {
@@ -1038,12 +1131,11 @@ define(function (require) {
                 },
                 this.myChart
             );
-            this.zr.refresh();
+            this.zr.refreshNextFrame();
         }
     };
     
     zrUtil.inherits(Pie, ChartBase);
-    zrUtil.inherits(Pie, ComponentBase);
     
     // 图表注册
     require('../chart').define('pie', Pie);

@@ -1,17 +1,9 @@
 ﻿(function () {
     require.config({
+        paths: {
+            echarts: '../../../doc/example/www/js'
+        },
         packages: [
-            {
-                name: 'echarts',
-                location: '../../../src',
-                main: 'echarts'
-            },
-            {
-                name: 'zrender',
-                //location: 'http://ecomfe.github.io/zrender/src',
-                location: '../../../../zrender/src',
-                main: 'zrender'
-            },
             {
                 name: 'BMap',
                 location: '../src',
@@ -24,8 +16,7 @@
     [
         'echarts',
         'BMap',
-        'echarts/chart/map',
-        'echarts/chart/pie'
+        'echarts/chart/map'
     ],
     function (echarts, BMapExtension) {
         $('#main').css({
@@ -34,7 +25,9 @@
         });
 
         // 初始化地图
-        var BMapExt = new BMapExtension($('#main')[0], BMap, echarts);
+        var BMapExt = new BMapExtension($('#main')[0], BMap, echarts,{
+            enableMapClick: false
+        });
         var map = BMapExt.getMap();
         var container = BMapExt.getEchartsContainer();
 
@@ -223,6 +216,7 @@
             dataRange: {
                 min : 0,
                 max : 100,
+                x: 'right',
                 calculable : true,
                 color: ['#ff3333', 'orange', 'yellow','lime','aqua'],
                 textStyle:{
@@ -410,7 +404,7 @@
                             {name:'常州',value:10}
                         ]
                     }
-                    
+
                 },
                 {
                     name:'上海',
@@ -547,7 +541,7 @@
                     data:[],
                     markLine : {
                         smooth:true,
-                        symbol: ['none', 'circle'],  
+                        symbol: ['none', 'circle'],
                         symbolSize : 1,
                         itemStyle : {
                             normal: {

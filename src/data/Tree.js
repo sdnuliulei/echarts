@@ -1,14 +1,33 @@
+/**
+ * Tree data structure
+ * 
+ * @module echarts/data/Tree
+ * @author Yi Shen(https://www.github.com/pissang)
+ */
 define(function(require) {
 
+    /**
+     * @constructor module:echarts/data/Tree~TreeNode
+     * @param {string} id Node ID
+     */
     function TreeNode(id) {
+        /**
+         * @type {string}
+         */
         this.id = id;
+        /**
+         * @type {number}
+         */
         this.depth = 0;
+        /**
+         * @type {number}
+         */
         this.height = 0;
+        /**
+         * @type {Array.<module:echarts/data/Tree~TreeNode>}
+         */
         this.children = [];
-
-        this.data = {};
-        this.layout = {};
-    };
+    }
 
     TreeNode.prototype.traverse = function (cb, context) {
         cb.call(context, this);
@@ -43,7 +62,15 @@ define(function(require) {
         }
     };
 
+    /**
+     * @constructor
+     * @alias module:echarts/data/Tree
+     * @param {string} id
+     */
     function Tree(id) {
+        /**
+         * @type {module:echarts/data/Tree~TreeNode}
+         */
         this.root = new TreeNode(id);
     }
 
@@ -71,7 +98,7 @@ define(function(require) {
             var graphNode = graph.getNodeById(root.id);
             for (var i = 0; i < graphNode.outEdges.length; i++) {
                 var edge = graphNode.outEdges[i];
-                var childTreeNode = treeNodesMap[edge.node2.id]
+                var childTreeNode = treeNodesMap[edge.node2.id];
                 root.children.push(childTreeNode);
                 buildHierarch(childTreeNode);
             }
@@ -82,7 +109,7 @@ define(function(require) {
         for (var i = 0; i < graph.nodes.length; i++) {
             var node = graph.nodes[i];
             var treeNode;
-            if (node.inDegree() == 0) {
+            if (node.inDegree() === 0) {
                 treeMap[node.id] = new Tree(node.id);
                 treeNode = treeMap[node.id].root;
             } else {
@@ -100,7 +127,7 @@ define(function(require) {
             treeList.push(treeMap[id]);
         }
         return treeList;
-    }
+    };
 
     return Tree;
 });
